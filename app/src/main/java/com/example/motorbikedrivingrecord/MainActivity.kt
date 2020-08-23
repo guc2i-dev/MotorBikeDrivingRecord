@@ -3,12 +3,14 @@ package com.example.motorbikedrivingrecord
 import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.util.Log
 import android.widget.Button
 import android.widget.TextView
-import androidx.lifecycle.Observer
-import java.sql.Timestamp
 
 class MainActivity : AppCompatActivity() {
+    val sensorService = SensorService(this)
+    val TAG = "MBDR"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -28,11 +30,14 @@ class MainActivity : AppCompatActivity() {
         val startButton = findViewById<Button>(R.id.startButton)
         startButton.setOnClickListener{
             //ログの取得開始
+            sensorService.setListener(sensorListener)
+            sensorService.start()
         }
 
         val stopButton = findViewById<Button>(R.id.stopButton)
         stopButton.setOnClickListener {
             //ログの取得終了
+            sensorService.stop()
         }
 
         val graphButton = findViewById<Button>(R.id.graphButton)
@@ -41,5 +46,25 @@ class MainActivity : AppCompatActivity() {
             val intent = Intent(applicationContext, GraphActivity::class.java)
             startActivity(intent)
         }
+    }
+
+    private val sensorListener = object : SensorServiceInterface{
+        var set: MutableSet<String> = mutableSetOf()
+
+        override fun onSensorChanged(sensorType: Int, values: FloatArray) {
+
+            var idx = -1
+            for (i in sensorService.sensors.indices){
+                if(sensorService.sensors[i].type == sensorType){
+                    idx = i
+                }
+            }
+            if (idx != -1) {
+                Log.d(TAG,"$sensorType ${sensorService.sensors[idx].name} ${values[0]}")
+                set.add(sensorService.sensors[idx].name)
+            }
+            Log.d(TAG,set.toString())
+        }
+        override fun onAccuracyChanged(sensorType: Int, accuracy: Int) {}
     }
 }

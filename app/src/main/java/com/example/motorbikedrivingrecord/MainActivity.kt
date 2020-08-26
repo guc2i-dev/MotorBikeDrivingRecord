@@ -6,14 +6,14 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.TextView
 import androidx.activity.viewModels
+import androidx.lifecycle.Observer
+import androidx.lifecycle.observe
 
 class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
-        val model: SensorViewModel by viewModels()
 
         //センサーデータのラベル
         val timestampValue = findViewById<TextView>(R.id.timestamp_value)
@@ -27,11 +27,24 @@ class MainActivity : AppCompatActivity() {
         val pitchValue = findViewById<TextView>(R.id.pitch_value)
         val rollValue = findViewById<TextView>(R.id.roll_value)
 
+        val sensorModel: SensorViewModel by viewModels()
+        val sensorObserver = Observer<SensorData> {  sensorData ->
+            timestampValue.text = sensorData.timestamp
+        }
+        sensorModel.sensorLiveData.observe(this, sensorObserver)
+
+
+
         val startButton = findViewById<Button>(R.id.startButton)
         startButton.setOnClickListener{
             // ログの取得開始
-            val intent = Intent(this,SensorService::class.java)
-            this.startService(intent)
+            //val intent = Intent(this,SensorService::class.java)
+            //this.startService(intent)
+
+            //test用コード
+            var tmp = SensorData()
+            tmp.timestamp = "test"
+            sensorModel.sensorLiveData.setValue(tmp)
         }
 
         val stopButton = findViewById<Button>(R.id.stopButton)

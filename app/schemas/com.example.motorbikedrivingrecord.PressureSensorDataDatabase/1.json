@@ -1,0 +1,40 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "7f53af96e04c6b76b9d28289b5abf02c",
+    "entities": [
+      {
+        "tableName": "PressureSensorData",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`datetime` TEXT NOT NULL, `hPaValue` TEXT NOT NULL, PRIMARY KEY(`datetime`))",
+        "fields": [
+          {
+            "fieldPath": "datetime",
+            "columnName": "datetime",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hPaValue",
+            "columnName": "hPaValue",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "columnNames": [
+            "datetime"
+          ],
+          "autoGenerate": false
+        },
+        "indices": [],
+        "foreignKeys": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '7f53af96e04c6b76b9d28289b5abf02c')"
+    ]
+  }
+}

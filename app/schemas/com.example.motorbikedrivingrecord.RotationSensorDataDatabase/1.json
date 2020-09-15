@@ -1,0 +1,64 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "c653ad655fdf77072a50d8e2a34f32f1",
+    "entities": [
+      {
+        "tableName": "RotationSensorData",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`datetime` TEXT NOT NULL, `xValue` TEXT NOT NULL, `yValue` TEXT NOT NULL, `zValue` TEXT NOT NULL, `cosValue` TEXT NOT NULL, `acc` TEXT NOT NULL, PRIMARY KEY(`datetime`))",
+        "fields": [
+          {
+            "fieldPath": "datetime",
+            "columnName": "datetime",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "xValue",
+            "columnName": "xValue",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "yValue",
+            "columnName": "yValue",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zValue",
+            "columnName": "zValue",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cosValue",
+            "columnName": "cosValue",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "acc",
+            "columnName": "acc",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "columnNames": [
+            "datetime"
+          ],
+          "autoGenerate": false
+        },
+        "indices": [],
+        "foreignKeys": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c653ad655fdf77072a50d8e2a34f32f1')"
+    ]
+  }
+}

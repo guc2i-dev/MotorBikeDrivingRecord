@@ -1,71 +1,69 @@
 package com.example.motorbikedrivingrecord
 
-import android.app.Service
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
 import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
-import android.os.Binder
 import android.os.Handler
 import android.os.IBinder
 import android.os.Message
+import android.util.Log
 
-class SensorServiceListener : Service(), SensorEventListener {
-    private var handler : Handler? = null
+interface SensorServiceInterface : SensorServiceListener.Listener {
+    fun onSensorChanged(sensorType : Int,values : FloatArray)
+    fun onLocationChanged(values : Array<Double>)
+}
+
+class SensorServiceListener(private val context: Context) : Handler(){
+
+    private lateinit var mService: SensorService
+    private var listener: SensorServiceInterface? = null
+    private val SENSOR = 1
+    private val LOCATION = 2
+    interface Listener {}
     var sensors: List<Sensor> = listOf()
 
-    override fun onCreate() {
-        super.onCreate()
-        val sensorManager: SensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        sensors = sensorManager.getSensorList(Sensor.TYPE_ALL)
-        if (sensors.isNotEmpty()) {
-            for (i in sensors.indices) {
-                val s: Sensor = sensors[i]
-                sensorManager.registerListener(this, s, SensorManager.SENSOR_DELAY_NORMAL)
-            }
+    fun start(){
+            val intent = Intent(context,SensorService::class.java)
+            context.bindService(intent, mConnection, Context.BIND_AUTO_CREATE)
+            context.startService(intent)
+    }
+    fun stop(){
+            val intent = Intent(context,SensorService::class.java)
+            context.unbindService(mConnection)
+            context.stopService(intent)
+    }
+
+    override fun handleMessage(msg: Message) {
+        if (msg.arg1 == SENSOR){
+            val values = msg.obj as FloatArray
+            listener?.onSensorChanged(msg.arg2,values)
+        }else if(msg.arg1 == LOCATION){
+            val values = msg.obj as Array<Double>
+            listener?.onLocationChanged(values)
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        val sensorManager : SensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        sensorManager.unregisterListener(this)
+    fun setListener(listener: Listener?) {
+        if (listener is SensorServiceInterface) {
+            this.listener = listener
+        }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return START_STICKY
+    private fun setHandler(){
+        mService.setHandler(this)
     }
 
-    override fun onSensorChanged(event: SensorEvent?) {
-        if (event == null) return
-        val msg = Message.obtain()               // センサー値取得イベントを発生させる
-        msg.arg1 = 1                                        // センサー値取得イベントを示す値
-        msg.arg2 = event.sensor.type                        // センサーの種類を渡す
-        msg.obj = event.values.clone()                      // センサーの値をコピーして渡す
-        if (handler != null) handler?.sendMessage(msg)      // メッセージ送信
-    }
+    private val mConnection = object: ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+            val localBinder = binder as SensorService.LocalBinder
+            mService = localBinder.getService()
+            sensors =  mService.sensors
+            setHandler()
+        }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        val msg = Message.obtain()               // レンジ変更イベントを発生させる
-        msg.arg1 = 2                                        // レンジ変更イベントを示す値
-        msg.arg2 = sensor!!.type.toInt()                      // センサーの種別
-        msg.obj = accuracy
-        if (handler != null) handler?.sendMessage(msg)      // メッセージ送信
-    }
-
-    private val binder = LocalBinder()
-
-    inner class LocalBinder : Binder(), IBinder {
-        fun getService(): SensorServiceListener = this@SensorServiceListener
-    }
-
-    override fun onBind(intent: Intent?): IBinder {
-        return binder
-    }
-
-    fun setHandler(handler  : Handler){
-        this.handler = handler
+        override fun onServiceDisconnected(name: ComponentName?) {
+        }
     }
 }

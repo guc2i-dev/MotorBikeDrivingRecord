@@ -1,73 +1,209 @@
 package com.example.motorbikedrivingrecord
 
+import android.Manifest
 import android.app.Service
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
+import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.os.Binder
-import android.os.Handler
-import android.os.IBinder
-import android.os.Message
+import android.location.Location
+import android.os.*
+import android.util.Log
+import androidx.core.app.ActivityCompat
+import com.google.android.gms.location.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.async
+import java.util.*
 
-interface SensorServiceInterface : SensorService.Listener {         // 独自のイベントリスナー
-    fun onSensorChanged(sensorType : Int,values : FloatArray)       // センサー値取得イベント
-    fun onAccuracyChanged(sensorType : Int,accuracy : Int)          // センサーレンジ変更イベント
-}
+class SensorService : Service(), SensorEventListener {
+    private var handler : Handler? = null
+    private val SENSOR = 1
+    private val LOCATION = 2
+    var sensors: MutableList<Sensor> = mutableListOf<Sensor>()
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private lateinit var locationCallback: LocationCallback
 
-class SensorService(private val context: Context) : Handler(){      // 様々なセンサーの情報を管理するクラス
-
-    private lateinit var mService: SensorServiceListener            // センサー取得サービスの参照用
-    private var listener: SensorServiceInterface? = null            // 外部へのリスナー仲介
-    interface Listener {}
-
-    var sensors: List<Sensor> = listOf()                            // センサー情報
-
-    fun start(){
-        val intent = Intent(context,SensorServiceListener::class.java)
-        context.bindService(intent, mConnection, Context.BIND_AUTO_CREATE)
-        context.startService(intent)
-    }
-    fun stop(){
-        val intent = Intent(context,SensorServiceListener::class.java)
-        context.unbindService(mConnection)
-        context.stopService(intent)
+    companion object {
+        lateinit var locationDB: LocationSensorDataDatabase
+        lateinit var accDB: AccSensorDataDatabase
+        lateinit var pressureDB: PressureSensorDataDatabase
+        lateinit var rotationDB: RotationSensorDataDatabase
     }
 
-    override fun handleMessage(msg: Message) {                  // スレッド間通信用メッセージクラス
+    override fun onCreate() {
+        super.onCreate()
 
-        if (msg.arg1 == 1){                                     // センサーの値取得時
-            val values = msg.obj as FloatArray      //センサーの値を参照
-            listener?.onSensorChanged(msg.arg2,values)          // センサー値取得イベント
+        //センサーデータ取得準備
+        val mSensorManager: SensorManager =
+            getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        val accelerometer: Sensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        val pressure: Sensor = mSensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE)
+        val rotation: Sensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+
+//        val magnetometer: Sensor = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+//        val gyroscope: Sensor = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+//        val geomagnetic: Sensor = mSensorManager.getDefaultSensor(Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR)
+
+        sensors.add(accelerometer)
+        sensors.add(pressure)
+        sensors.add(rotation)
+//        sensors.add(magnetometer)
+//        sensors.add(gyroscope)
+//        sensors.add(geomagnetic)
+
+        for (i in sensors.indices) {
+            val s: Sensor = sensors[i]
+            mSensorManager.registerListener(this, s, SensorManager.SENSOR_DELAY_NORMAL)
         }
-        if (msg.arg1 == 2){                                                     // センサーのレンジ変更時
-            listener?.onAccuracyChanged(msg.arg2,msg.obj.toString().toInt())    // レンジ変更イベント
+
+        //すべてのセンサをチェックする
+//        sensors = mSensorManager.getSensorList(Sensor.TYPE_ALL)
+//        if (sensors.isNotEmpty()) {
+//            for (i in sensors.indices) {
+//                val s: Sensor = sensors[i]
+//                mSensorManager.registerListener(this, s, SensorManager.SENSOR_DELAY_NORMAL)
+//            }
+//        }
+
+        //データベースの初期化
+        locationDB = LocationSensorDataDatabase.getDatabase(applicationContext)
+        accDB = AccSensorDataDatabase.getDatabase(applicationContext)
+        pressureDB = PressureSensorDataDatabase.getDatabase(applicationContext)
+        rotationDB = RotationSensorDataDatabase.getDatabase(applicationContext)
+
+        //ロケーションデータ取得準備
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        locationCallback = object : LocationCallback() {
+            override fun onLocationResult(locationResult: LocationResult?) {
+                locationResult ?: return
+                for (location in locationResult.locations){
+                    val msg = Message.obtain()
+                    msg.arg1 = LOCATION
+                    val locationArray = arrayOf(location.speed.toDouble(),location.latitude, location.longitude)
+                    msg.obj = locationArray.clone()
+                    if (handler != null) handler?.sendMessage(msg)
+
+                    val datetime = System.currentTimeMillis()
+                    var locationSensorData = LocationSensorData(datetime.toString(), location.speed.toString(), location.latitude.toString(), location.longitude.toString())
+                    GlobalScope.async(Dispatchers.Default) {
+                        val locationSensorDao = locationDB.locationSensorDataDao()
+                        locationSensorDao.insertLocationSensorData(locationSensorData)
+                    }
+                }
+            }
+        }
+        startLocationUpdates()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        val sensorManager : SensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        sensorManager.unregisterListener(this)
+        stopLocationUpdates()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY
+    }
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event == null) return
+        val msg = Message.obtain()
+        msg.arg1 = SENSOR
+        msg.arg2 = event.sensor.type
+        msg.obj = event.values.clone()
+        if (handler != null) handler?.sendMessage(msg)
+
+        //データの保存
+        val datetime = System.currentTimeMillis()
+        when (event.sensor.type) {
+            Sensor.TYPE_ACCELEROMETER -> {
+                var accSensorData = AccSensorData(
+                    datetime.toString(),
+                    event.values[0].toString(),
+                    event.values[1].toString(),
+                    event.values[2].toString()
+                )
+                GlobalScope.async(Dispatchers.Default) {
+                    val accSensorDao = accDB.accSensorDataDao()
+                    accSensorDao.insertAccSensorData(accSensorData)
+                }
+            }
+            Sensor.TYPE_PRESSURE -> {
+                var pressureSensorData = PressureSensorData(
+                    datetime.toString(),
+                    event.values[0].toString()
+                )
+                GlobalScope.async(Dispatchers.Default) {
+                    val pressureSensorDao = pressureDB.pressureSensorDataDao()
+                    pressureSensorDao.insertAccSensorData(pressureSensorData)
+                }
+            }
+            Sensor.TYPE_ROTATION_VECTOR -> {
+                var rotationSensorData = RotationSensorData(
+                    datetime.toString(),
+                    event.values[0].toString(),
+                    event.values[1].toString(),
+                    event.values[2].toString(),
+                    event.values[3].toString(),
+                    event.values[4].toString()
+                )
+                GlobalScope.async(Dispatchers.Default) {
+                    val rotationSensorDao = rotationDB.rotationSensorDataDao()
+                    rotationSensorDao.insertAccSensorData(rotationSensorData)
+                }
+            }
         }
     }
 
-    fun setListener(listener: Listener?) {         // イベント受け取り先を設定
-        if (listener is SensorServiceInterface) {
-            this.listener = listener
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+    }
+
+    private fun startLocationUpdates() {
+        val locationRequest = createLocationRequest() ?: return
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        fusedLocationClient.requestLocationUpdates(
+            locationRequest,
+            locationCallback,
+            null)
+    }
+
+    private fun stopLocationUpdates() {
+        fusedLocationClient.removeLocationUpdates(locationCallback)
+    }
+
+    private fun createLocationRequest(): LocationRequest? {
+        return LocationRequest.create()?.apply {
+            interval = 10000
+            fastestInterval = 5000
+            priority = LocationRequest.PRIORITY_HIGH_ACCURACY
         }
     }
 
-    private fun setHandler(){
-        mService.setHandler(this)
+    private val binder = LocalBinder()
+
+    inner class LocalBinder : Binder(), IBinder {
+        fun getService(): SensorService = this@SensorService
     }
 
-    private val mConnection = object: ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            val localBinder = binder as SensorServiceListener.LocalBinder
-            mService = localBinder.getService()
-            sensors =  mService.sensors
-            setHandler()
-        }
+    override fun onBind(intent: Intent?): IBinder {
+        return binder
+    }
 
-        override fun onServiceDisconnected(name: ComponentName?) {
-        }
+    fun setHandler(handler  : Handler){
+        this.handler = handler
     }
 }

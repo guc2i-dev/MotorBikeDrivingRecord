@@ -1,0 +1,52 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "ac5b78a5170ad9e624464417aff0ca31",
+    "entities": [
+      {
+        "tableName": "AccSensorData",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`datetime` TEXT NOT NULL, `xValue` TEXT NOT NULL, `yValue` TEXT NOT NULL, `zValue` TEXT NOT NULL, PRIMARY KEY(`datetime`))",
+        "fields": [
+          {
+            "fieldPath": "datetime",
+            "columnName": "datetime",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "xValue",
+            "columnName": "xValue",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "yValue",
+            "columnName": "yValue",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zValue",
+            "columnName": "zValue",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "columnNames": [
+            "datetime"
+          ],
+          "autoGenerate": false
+        },
+        "indices": [],
+        "foreignKeys": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ac5b78a5170ad9e624464417aff0ca31')"
+    ]
+  }
+}
